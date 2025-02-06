@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -63,8 +64,17 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	mediaTypeSlice := strings.Split(mediaType, "/")
-	fileExtension := mediaTypeSlice[len(mediaTypeSlice)-1]
+	fileType, _, err := mime.ParseMediaType(mediaType)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "cannot parse Content-Type", err)
+		return
+	}
+	if fileType != "image/jpeg" && fileType != "image/png"{
+		respondWithError(w, http.StatusBadRequest, "only Content-Type accepted are image/jpg and image/png", nil)
+		return
+	}
+
+	fileExtension := strings.Split(mediaType, "/")[1]
 	filename := fmt.Sprintf("%s.%s", videoID,fileExtension)
 	fileFullPath := filepath.Join(cfg.assetsRoot, filename)
 	fileSaved, err := os.Create(fileFullPath)

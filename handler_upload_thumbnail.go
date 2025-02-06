@@ -4,6 +4,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/auth"
 	"github.com/google/uuid"
@@ -36,22 +39,16 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 	r.ParseMultipartForm(maxMemory)
 
 	// "thumbnail" should match the HTML form input name
-	file, header, err := r.FormFile("thumbnail")
+	fileReceived, header, err := r.FormFile("thumbnail")
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Unable to parse form file", err)
 		return
 	}
-	defer file.Close()
+	defer fileReceived.Close()
 
 	mediaType := header.Header.Get("Content-Type")
 	if mediaType == "" {
 		respondWithError(w, http.StatusBadRequest, "missing content-type", err)
-		return
-	}
-
-	fileData, err := io.ReadAll(file)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest, "cannot read file", err)
 		return
 	}
 
@@ -66,14 +63,22 @@ func (cfg *apiConfig) handlerUploadThumbnail(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	th := thumbnail{
-		data:      fileData,
-		mediaType: mediaType,
+	mediaTypeSlice := strings.Split(mediaType, "/")
+	fileExtension := mediaTypeSlice[len(mediaTypeSlice)-1]
+	filename := fmt.Sprintf("%s.%s", videoID,fileExtension)
+	fileFullPath := filepath.Join(cfg.assetsRoot, filename)
+	fileSaved, err := os.Create(fileFullPath)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "error saving thumbnial", err)
+		return
+	}
+	_, err = io.Copy(fileSaved, fileReceived)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "error saving thumbnial", err)
+		return
 	}
 
-	videoThumbnails[videoID] = th
-
-	thUrl := fmt.Sprintf("http://localhost:%s/api/thumbnails/%s", cfg.port, videoIDString)
+	thUrl := fmt.Sprintf("http://localhost:%s/assets/%s", cfg.port, filename)
 	videoDb.ThumbnailURL = &thUrl
 
 	err = cfg.db.UpdateVideo(videoDb)

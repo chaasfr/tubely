@@ -2,7 +2,6 @@ package main
 
 import (
 	"crypto/rand"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -18,7 +17,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	const maxMemory = 1 << 30
 	r.ParseMultipartForm(maxMemory)
 	http.MaxBytesReader(w, r.Body, maxMemory)
-	
+
 	videoIDString := r.PathValue("videoID")
 	videoID, err := uuid.Parse(videoIDString)
 	if err != nil {
@@ -46,7 +45,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusUnauthorized, "video does not belong to user", err)
 		return
 	}
-	
+
 	fmt.Println("uploading video", videoID, "by user", userID)
 
 	r.ParseMultipartForm(maxMemory)
@@ -69,7 +68,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "cannot parse Content-Type", err)
 		return
 	}
-	if fileType != "video/mp4"{
+	if fileType != "video/mp4" {
 		respondWithError(w, http.StatusBadRequest, "only Content-Type accepted are video/mp4", nil)
 		return
 	}
@@ -100,13 +99,12 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 	}
 	defer os.Remove(tempFileFastStartPath)
 
-	tempFileFastStart, err :=os.Open(tempFileFastStartPath)
+	tempFileFastStart, err := os.Open(tempFileFastStartPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "error reading fastprocess video", err)
 		return
 	}
 	defer tempFileFastStart.Close()
-
 
 	aspectRatio, err := getVideoAspectRatio(tempFileFastStartPath)
 	if err != nil {
@@ -120,30 +118,41 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		respondWithError(w, http.StatusBadRequest, "error saving thumbnail", err)
 		return
 	}
-	
-	randomName := base64.RawURLEncoding.EncodeToString(randomFileId)
-	fileName := fmt.Sprintf("%s/%s", aspectRatio, randomName)
 
-	s3PutParams := s3.PutObjectInput{
-		Bucket:                    &cfg.s3Bucket,
-		Key:                       &fileName,
-		Body:                      tempFileFastStart,
-		ContentType:               &mediaType,
+	//randomName := base64.RawURLEncoding.EncodeToString(randomFileId)
+	//fileName := fmt.Sprintf("%s/%s", aspectRatio, randomName)
+	fileName := aspectRatio + ".mp4"
+
+
+	videoUrl := fmt.Sprintf("%s,%s", cfg.s3Bucket, fileName)
+	videoDb.VideoURL = &videoUrl
+
+	err = cfg.db.UpdateVideo(videoDb)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "error saving video metadata", err)
+		return
 	}
+
+	videoDb, err = cfg.dbVideoToSignedVideo(videoDb)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error generated presigned url", err)
+		return
+	}
+
 	
+	s3PutParams := s3.PutObjectInput{
+		Bucket:      &cfg.s3Bucket,
+		Key:         &fileName,
+		Body:        tempFileFastStart,
+		ContentType: &mediaType,
+	}
+
+
 	_, err = cfg.s3Client.PutObject(r.Context(), &s3PutParams)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "error saving video", err)
 		return
 	}
-	
-	videoUrl := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, fileName)
-	videoDb.VideoURL = &videoUrl
-	
-	err = cfg.db.UpdateVideo( videoDb)
-	if err != nil {
-		respondWithError(w, http.StatusBadRequest,"error saving video metadata", err)
-		return
-	}
+
 	w.WriteHeader(204)
 }

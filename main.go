@@ -4,7 +4,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/bootdotdev/learn-file-storage-s3-golang-starter/internal/database"
 
 	"github.com/joho/godotenv"
@@ -21,6 +21,7 @@ type apiConfig struct {
 	s3Region         string
 	s3CfDistribution string
 	port             string
+	s3Client         *s3.Client
 }
 
 type thumbnail struct {
@@ -92,6 +93,8 @@ func main() {
 		s3CfDistribution: s3CfDistribution,
 		port:             port,
 	}
+
+	cfg.s3Client = cfg.getDefaultS3Client()
 
 	err = cfg.ensureAssetsDir()
 	if err != nil {

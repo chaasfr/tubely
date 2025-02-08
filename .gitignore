@@ -1,4 +1,5 @@
 out
+aws/
 *.db
 .env
 assets/

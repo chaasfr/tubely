@@ -94,17 +94,25 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	aspectRatio, err := getVideoAspectRatio(tempFile.Name())
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "error reading aspect ratio", err)
+		return
+	}
+
 	randomFileId := make([]byte, 32)
 	_, err = rand.Read(randomFileId)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "error saving thumbnail", err)
 		return
 	}
-	randomFileName := base64.RawURLEncoding.EncodeToString(randomFileId)
+	
+	randomName := base64.RawURLEncoding.EncodeToString(randomFileId)
+	fileName := fmt.Sprintf("%s/%s", aspectRatio, randomName)
 
 	s3PutParams := s3.PutObjectInput{
 		Bucket:                    &cfg.s3Bucket,
-		Key:                       &randomFileName,
+		Key:                       &fileName,
 		Body:                      tempFile,
 		ContentType:               &mediaType,
 	}
@@ -115,7 +123,7 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	
-	videoUrl := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, randomFileName)
+	videoUrl := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", cfg.s3Bucket, cfg.s3Region, fileName)
 	videoDb.VideoURL = &videoUrl
 	
 	err = cfg.db.UpdateVideo( videoDb)

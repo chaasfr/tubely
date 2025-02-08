@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"mime"
@@ -119,12 +120,11 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	//randomName := base64.RawURLEncoding.EncodeToString(randomFileId)
-	//fileName := fmt.Sprintf("%s/%s", aspectRatio, randomName)
-	fileName := aspectRatio + ".mp4"
+	randomName := base64.RawURLEncoding.EncodeToString(randomFileId)
+	fileName := fmt.Sprintf("%s/%s", aspectRatio, randomName)
 
 
-	videoUrl := fmt.Sprintf("%s,%s", cfg.s3Bucket, fileName)
+	videoUrl := fmt.Sprintf("%s/%s", cfg.s3CfDistribution, fileName)
 	videoDb.VideoURL = &videoUrl
 
 	err = cfg.db.UpdateVideo(videoDb)
@@ -133,13 +133,6 @@ func (cfg *apiConfig) handlerUploadVideo(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	videoDb, err = cfg.dbVideoToSignedVideo(videoDb)
-	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "error generated presigned url", err)
-		return
-	}
-
-	
 	s3PutParams := s3.PutObjectInput{
 		Bucket:      &cfg.s3Bucket,
 		Key:         &fileName,
